@@ -47,7 +47,7 @@ export default function App() {
   });
 
   // World/gameplay refs (mutated inside the loop)
-  const birdRef = useRef({ x: 160, y: 240, vy: 0, r: 16 });
+  const birdRef = useRef({ x: 160, y: 240, vy: 0, r: 16, wingAngle: 0 });
   const pipesRef = useRef([]); // { x, topH }
   const gameOverRef = useRef(false);
   const scoredSetRef = useRef(new Set());
@@ -116,6 +116,7 @@ export default function App() {
       y: Math.round(H * 0.5),
       vy: 0,
       r: Math.max(14, Math.round(16 * s)),
+      wingAngle: 0,
     };
 
     // Generate fresh pipes when size or mode changes (auto-restart)
@@ -165,7 +166,13 @@ export default function App() {
 
   const resetGame = () => {
     const { w: W, h: H } = displaySize;
-    birdRef.current = { x: Math.round(W * 0.18), y: Math.round(H * 0.5), vy: 0, r: birdRef.current.r };
+    birdRef.current = {
+      x: Math.round(W * 0.18),
+      y: Math.round(H * 0.5),
+      vy: 0,
+      r: birdRef.current.r,
+      wingAngle: 0,
+    };
     pipesRef.current = generateInitialPipes(W);
     scoredSetRef.current.clear();
     gameOverRef.current = false;
@@ -219,6 +226,7 @@ export default function App() {
     }
     if (!paused) {
       birdRef.current.vy = worldRef.current.flap;
+      birdRef.current.wingAngle = -0.8;
       sfxFlap();
     }
   };
@@ -299,6 +307,9 @@ export default function App() {
     // Physics
     bird.vy += world.gravity;
     bird.y += bird.vy;
+    if (bird.wingAngle < 0) {
+      bird.wingAngle = Math.min(bird.wingAngle + 0.2, 0);
+    }
 
     // Move pipes
     const pipes = pipesRef.current;
@@ -474,8 +485,12 @@ export default function App() {
 
     // Wing
     ctx.fillStyle = '#f39c12';
-    roundRect(ctx, -8, -4, 16, 8, 4);
+    ctx.save();
+    ctx.translate(-8, 0);
+    ctx.rotate(b.wingAngle || 0);
+    roundRect(ctx, 0, -4, 16, 8, 4);
     ctx.fill();
+    ctx.restore();
 
     // Eye
     ctx.fillStyle = '#ffffff';
