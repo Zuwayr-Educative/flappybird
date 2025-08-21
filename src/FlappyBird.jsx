@@ -5,16 +5,24 @@ import React, { useEffect, useRef, useState } from "react";
 // auto-restart on mode change, retro font HUD, layered clouds,
 // and WebAudio sound effects (flap/score/game over).
 
-export default function FlappyBird() {
+export default function App() {
   // Inject retro font once
   useEffect(() => {
-    const id = 'press-start-2p-font';
+    const id = 'Press Start 2P';
     if (!document.getElementById(id)) {
       const link = document.createElement('link');
       link.id = id;
       link.rel = 'stylesheet';
       link.href = 'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap';
       document.head.appendChild(link);
+    }
+    // Inject Tailwind CSS
+    const tailwindId = 'tailwind-css';
+    if (!document.getElementById(tailwindId)) {
+        const script = document.createElement('script');
+        script.id = tailwindId;
+        script.src = "https://cdn.tailwindcss.com";
+        document.head.appendChild(script);
     }
   }, []);
 
@@ -60,7 +68,8 @@ export default function FlappyBird() {
   // === Size & scaling ===
   const ASPECT = 2; // width : height
   function recomputeSize() {
-    const vw = Math.max(640, Math.min(1440, typeof window !== 'undefined' ? window.innerWidth - 32 : 960));
+    // Reduced the minimum width to 400px for better responsiveness on smaller screens.
+    const vw = Math.max(400, Math.min(1440, typeof window !== 'undefined' ? window.innerWidth - 32 : 960));
     const w = Math.round(vw);
     const h = Math.round(w / ASPECT);
     setDisplaySize({ w, h });
@@ -217,24 +226,53 @@ export default function FlappyBird() {
   // Input handlers
   useEffect(() => {
     const onKey = (e) => {
-      if (e.code === 'Space' || e.code === 'ArrowUp') {
+      // Handle space bar and arrow up for flapping
+      if (e.code === 'Space' || e.key === ' ' || e.code === 'ArrowUp') {
         e.preventDefault();
+        ensureAudio();
         flap();
-      } else if (e.code === 'KeyP') {
+      } 
+      // Handle P key for pause
+      else if (e.code === 'KeyP' || e.key === 'p') {
+        e.preventDefault();
         togglePause();
-      } else if (e.code === 'Enter') {
-        if (!running) {
-          setRunning(true);
+      } 
+      // Handle R key for restart
+      else if (e.code === 'KeyR' || e.key === 'r') {
+        e.preventDefault();
+        if (running) {
           resetGame();
-        } else if (gameOverRef.current) {
+          setRunning(true);
+          setPaused(false);
+        } else {
+          setRunning(true);
           resetGame();
         }
       }
+      // Handle Enter key for starting/restarting
+      else if (e.code === 'Enter') {
+        e.preventDefault();
+        if (!running) {
+          setRunning(true);
+          setPaused(false);
+          resetGame();
+        } else if (gameOverRef.current) {
+          resetGame();
+          setRunning(true);
+          setPaused(false);
+        }
+      }
     };
+
+    // Add event listeners for both keydown and keypress (for better browser compatibility)
     window.addEventListener('keydown', onKey, { passive: false });
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running]);
+    window.addEventListener('keypress', onKey, { passive: false });
+    
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keypress', onKey);
+    };
+  }, [running, paused, gameOverRef]);
 
   // Animation loop
   useEffect(() => {
@@ -348,8 +386,16 @@ export default function FlappyBird() {
     const ctx = canvas.getContext('2d');
     const { w: W, h: H } = displaySize;
 
-    // Sky
-    ctx.fillStyle = worldRef.current.skyColor;
+    // Sky: Draw a gradient for normal mode, solid color otherwise.
+    // This makes the canvas background match the page background seamlessly.
+    if (mode === 'normal') {
+        const gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, '#bae6fd');
+        gradient.addColorStop(1, '#60a5fa');
+        ctx.fillStyle = gradient;
+    } else {
+        ctx.fillStyle = worldRef.current.skyColor;
+    }
     ctx.fillRect(0, 0, W, H);
 
     // Clouds parallax (three layers, more clouds on screen)
@@ -369,19 +415,19 @@ export default function FlappyBird() {
     // Bird
     drawBird(ctx);
 
-    // HUD (Canvas score to avoid depending on React re-renders)
-    ctx.font = 'bold 20px "Press Start 2P", ui-monospace, monospace';
+    // For the HUD
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    shadowText(ctx, String(scoreRef.current), W / 2, 16);
 
     // Hints
     if (!running) {
       ctx.font = '600 14px "Press Start 2P", ui-monospace, monospace';
       shadowText(ctx, 'Tap/Click/Space to start', W / 2, H / 2 - 12);
     } else if (gameOverRef.current) {
-      ctx.font = '600 16px "Press Start 2P", ui-monospace, monospace';
-      shadowText(ctx, 'Game Over — press Space', W / 2, H / 2 - 12);
+      ctx.font = 'bold 48px "Press Start 2P", ui-monospace, monospace';
+      shadowText(ctx, 'Game Over', W / 2, H / 2 - 30);
+      ctx.font = '600 14px "Press Start 2P", ui-monospace, monospace';
+      shadowText(ctx, 'Press Space to Restart', W / 2, H / 2 + 20);
     }
   }
 
@@ -485,54 +531,61 @@ export default function FlappyBird() {
 
   // UI
   const { w: W, h: H } = displaySize;
+  // The page background now matches the solid sky color for a seamless look.
+  const pageBackgroundColor = mode === 'easy' ? '#FFF7BF' : mode === 'hard' ? '#9CA3AF' : '#87CEEB';
+
   return (
-    <div className="w-full min-h-screen flex items-center justify-center p-4" style={{ background: mode === 'easy' ? '#FFF7BF' : mode === 'hard' ? '#9CA3AF' : 'linear-gradient(to bottom, #bae6fd, #60a5fa)' }}>
-      <div className="relative" style={{ width: W, height: H }}>
-        <canvas
-          ref={canvasRef}
-          width={W}
-          height={H}
-          className="rounded-2xl shadow-xl border border-white/40 bg-transparent select-none touch-none"
-          onMouseDown={() => { ensureAudio(); flap(); }}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            ensureAudio();
-            flap();
-          }}
-        />
+    <div className="w-full min-h-screen flex flex-col items-center justify-center p-4" style={{ background: pageBackgroundColor }}>
+        <div className="relative" style={{ width: W, height: H, fontFamily: '"Press Start 2P", ui-monospace, monospace' }}>
+            {/* Overlay HUD */}
+            <div className="absolute -top-16 left-1/2 -translate-x-1/2 flex items-center gap-3 text-white drop-shadow-md bg-black/40 text-white rounded-2xl px-4 py-2 flex items-center justify-center gap-x-6 gap-y-2 flex-wrap shadow-lg">
+                <span className="text-base sm:text-lg">Score: <span className="font-bold w-12 inline-block">{score}</span></span>
+                <span className="text-base sm:text-lg">Best: <span className="font-bold w-12 inline-block">{best}</span></span>
+                <div className="flex items-center gap-2">
+                    <label htmlFor="mode-select" className="text-base sm:text-lg">Mode:</label>
+                    <select
+                        id="mode-select"
+                        className="bg-white/20 text-white rounded-lg px-2 py-1 text-base border-none focus:ring-2 focus:ring-white/50 appearance-none"
+                        style={{
+                          background: "rgba(255,255,255,0.2) url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E') no-repeat right .7em center/8px 10px",
+                          minWidth: "100px",     // ensures space for text
+                          paddingRight: "2em",   // makes room for the arrow
+                        }}
+                        value={mode}
+                        onChange={(e) => {
+                            const m = e.target.value;
+                            setMode(m);
+                            resetGame();
+                            setRunning(true);
+                            setPaused(false);
+                            ensureAudio();
+                        }}
+                    >
+                        <option style={{color: 'black'}} value="easy">Easy</option>
+                        <option style={{color: 'black'}} value="normal">Normal</option>
+                        <option style={{color: 'black'}} value="hard">Hard</option>
+                    </select>
+                </div>
+            </div>
 
-        {/* Overlay HUD */}
-        <div className="absolute -top-16 left-1/2 -translate-x-1/2 flex items-center gap-3 text-white drop-shadow-md" style={{ fontFamily: '"Press Start 2P", ui-monospace, monospace' }}>
-          <span className="px-3 py-1 rounded-xl bg-black/30 text-xs">Score: {score}</span>
-          <span className="px-3 py-1 rounded-xl bg-black/30 text-xs">Best: {best}</span>
-          <div className="px-3 py-1 rounded-xl bg-black/30 text-xs flex items-center gap-2">
-            <label className="flex items-center gap-2">
-              <span>Mode:</span>
-              <select
-                className="bg-white/90 text-slate-800 rounded-lg px-2 py-1"
-                value={mode}
-                onChange={(e) => {
-                  const m = e.target.value;
-                  setMode(m);
-                  // Always restart immediately when changing difficulty
-                  resetGame();
-                  setRunning(true);
-                  setPaused(false);
-                  ensureAudio();
+            <canvas
+                ref={canvasRef}
+                width={W}
+                height={H}
+                className="rounded-2xl shadow-xl border border-white/40 bg-transparent select-none touch-none"
+                onMouseDown={() => { ensureAudio(); flap(); }}
+                onTouchStart={(e) => {
+                    e.preventDefault();
+                    ensureAudio();
+                    flap();
                 }}
-              >
-                <option value="easy">Easy</option>
-                <option value="normal">Normal</option>
-                <option value="hard">Hard</option>
-              </select>
-            </label>
-          </div>
+            />
         </div>
-
+        
         {/* Controls */}
         <div className="mt-4 flex items-center justify-center gap-2" style={{ fontFamily: '"Press Start 2P", ui-monospace, monospace' }}>
           <button
-            className="px-4 py-2 rounded-2xl shadow bg-white text-slate-800 hover:shadow-lg active:scale-[0.98]"
+            className="px-4 py-2 rounded-2xl shadow bg-white text-slate-800 hover:shadow-lg active:scale-[0.98] text-sm"
             onClick={() => {
               ensureAudio();
               if (!running) {
@@ -551,7 +604,7 @@ export default function FlappyBird() {
           </button>
 
           <button
-            className="px-4 py-2 rounded-2xl shadow bg-white/90 text-slate-800 hover:shadow-lg active:scale-[0.98]"
+            className="px-4 py-2 rounded-2xl shadow bg-white/90 text-slate-800 hover:shadow-lg active:scale-[0.98] text-sm"
             onClick={() => { ensureAudio(); togglePause(); }}
             disabled={!running}
           >
@@ -559,7 +612,7 @@ export default function FlappyBird() {
           </button>
 
           <button
-            className="px-4 py-2 rounded-2xl shadow bg-white/90 text-slate-800 hover:shadow-lg active:scale-[0.98]"
+            className="px-4 py-2 rounded-2xl shadow bg-white/90 text-slate-800 hover:shadow-lg active:scale-[0.98] text-sm"
             onClick={() => {
               ensureAudio();
               setRunning(true);
@@ -567,15 +620,14 @@ export default function FlappyBird() {
               resetGame();
             }}
           >
-            Restart
+            Restart (R)
           </button>
         </div>
 
         {/* Tips */}
-        <p className="mt-2 text-center text-white/90 text-xs" style={{ fontFamily: '"Press Start 2P", ui-monospace, monospace' }}>
-          Controls: Space/Up = Flap · P = Pause · Click/Tap
+        <p className="mt-3 text-center text-white/90 text-xs" style={{ fontFamily: '"Press Start 2P", ui-monospace, monospace' }}>
+          Space/Up/Click/Tap to Flap
         </p>
-      </div>
     </div>
   );
 }
