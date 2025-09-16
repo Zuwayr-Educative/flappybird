@@ -2,8 +2,6 @@
 
 A retro-style Flappy Bird clone built with **React**, **Vite**, **Tailwind CSS**, and the **Web Audio API**. Features multiple difficulty modes, retro font styling, parallax clouds, and sound effects.
 
-![screenshot](./public/screenshot.png)
-
 ---
 
 ## 🚀 Features
