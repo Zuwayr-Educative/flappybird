@@ -11,6 +11,7 @@ A retro-style Flappy Bird clone built with **React**, **Vite**, **Tailwind CSS**
 - **Layered parallax clouds** in the background
 - **Sound effects** for flap, score, and game over
 - Responsive **2:1 aspect ratio canvas**
+- Flapping wings animation
 
 ---
 
